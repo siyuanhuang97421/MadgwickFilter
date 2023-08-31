@@ -20,6 +20,11 @@ def wrap_angle(prev,cur):
                 cur[i] = cur[i] + 2*np.pi
     return cur
 
+def quat_conjugate(q):
+    q_conj = np.array([-q[0],-q[1],-q[2],q[3]])
+
+    return q_conj
+
 def quat_product(q1,q2):
     q1_x = q1[0]
     q1_y = q1[1]
@@ -150,6 +155,8 @@ class Phase1:
         self.pitch_madg=[]
         self.yaw_madg=[]
 
+        self.q_diff=[]
+
         # self.rots = self.vicon_data['rots']
         # self.ts_vicon = self.vicon_data['ts']
         # print(len(self.ts_vicon[0]))
@@ -267,7 +274,8 @@ class Phase1:
         beta = 0.1  # Beta parameter for Madgwick filter
 
         # initial_q = np.array([0.0, 0.0, 0.0, 1.0]).T  # Initial quaternion (x, y, z, w)
-        initial_q = RM_to_quaternion(self.vicon_data.rot_matrices[:,:,0])
+        initial_q = RM_to_quaternion(self.vicon_data.rot_matrices[:,:,0]) # this is in world frame
+        initial_q = quat_conjugate(initial_q)/((np.linalg.norm(initial_q))**2) # this is in body frame
         initial_state = {"q_xyzw": initial_q}
         self.q = [initial_q]
 
@@ -277,9 +285,12 @@ class Phase1:
         self.yaw_madg = [yaw]
 
         imu_data_itr = IMUDataIterator(self.imu_data)
+        vicon_data_itr = ViconDataIterator(self.vicon_data)
         madgwick_filter = MadgwickFilter(initial_state)
         prev_euler_angles = None
+        self.q_diff.append(0)
         while imu_data_itr.step():
+            vicon_data_itr.step()
             imu_measurement = imu_data_itr.getCurrentData()
 
             madgwick_filter.updateIMUMeasurement(imu_measurement)
@@ -287,12 +298,20 @@ class Phase1:
 
             state = madgwick_filter.getCurrentState()
 
+            q_world = quat_conjugate(state["q_xyzw"])/((np.linalg.norm(state["q_xyzw"]))**2)
+
             self.q.append(state["q_xyzw"])
             
-            roll, pitch, yaw = quaternion_to_euler(state["q_xyzw"])
+            vicon_rot = vicon_data_itr.getCurrentData()["rot_matrix"]
+            vicon_q = RM_to_quaternion(vicon_rot)
+            q_diff = np.linalg.norm(1 - quat_product(state["q_xyzw"], quat_conjugate(vicon_q)))
+
+            self.q_diff.append(q_diff)
+            roll, pitch, yaw = quaternion_to_euler(q_world)
             self.roll_madg.append(roll)
             self.pitch_madg.append(pitch)
             self.yaw_madg.append(yaw)
+
 
         # print(len(self.roll_madg))
 
@@ -350,6 +369,11 @@ class Phase1:
         plt.legend()
         plt.title('Yaw Orientation Over Time')
 
+        plt.show()
+
+    def plot_q_diff(self):
+        # plt.fig()
+        plt.plot(self.imu_data.ts, self.q_diff)
         plt.show()
     
     def rotplotter(self):
@@ -427,7 +451,7 @@ def main():
     vicon_data = ViconDataset(vicon_data_loader)
 
     # accel_param_path = "/home/mayank/Desktop/Drones/YourDirectoryID_p0_dev/Phase1/IMUParams.mat"
-    accel_param_path = "IMUParams.mat"
+    accel_param_path = "Data/Train/IMUParams.mat"
     accel_param_loader = MatDataLoader(accel_param_path)
     accel_param = AccelParam(accel_param_loader)
 
