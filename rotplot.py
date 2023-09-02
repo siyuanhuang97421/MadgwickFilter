@@ -41,7 +41,7 @@ def rotplot(R, currentAxes=None):
     rectangleBack.set_facecolor('b')
     ax.add_collection(rectangleBack)
 
-    ax.set_aspect('equal')
+    ax.set_aspect('auto')
     ax.set_xlim3d(-2, 2)
     ax.set_ylim3d(-2, 2)
     ax.set_zlim3d(-2, 2)

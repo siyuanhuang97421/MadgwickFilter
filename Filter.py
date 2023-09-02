@@ -36,31 +36,33 @@ class MadgwickFilter(Filter):
     def step(self):
         beta = 0.1
         gyro_measurement = np.append(np.array([0]),self.imu_measurement["omega_xyz"])
-        accel_measurement = np.append(np.array([0]),self.imu_measurement["accel_xyz"])
+        accel_measurement = np.append(np.array([0]), self.imu_measurement["accel_xyz"])
         accel_measurement /= np.linalg.norm(accel_measurement)
 
-        q_xyzw = self.current_state["q_xyzw"]
-        q_x = q_xyzw[0]
-        q_y = q_xyzw[1]
-        q_z = q_xyzw[2]
-        q_w = q_xyzw[3]
+        q_wxyz = self.current_state["q_wxyz"]
+        q_w = q_wxyz[0]
+        q_x = q_wxyz[1]
+        q_y = q_wxyz[2]
+        q_z = q_wxyz[3]
 
-        f = np.array([2.0 * (q_y * q_w - q_x * q_z) - accel_measurement[1],
-                          2.0 * (q_x * q_y + q_z * q_w) - accel_measurement[2],
-                          2*(0.5 - q_y**2 - q_z**2) - accel_measurement[3]]).T# 3x1
+
+        f = np.array([2.0 * (q_x * q_z - q_w * q_y) - accel_measurement[1],
+                          2.0 * (q_w * q_x + q_y * q_z) - accel_measurement[2],
+                          2*(0.5 - q_x**2 - q_y**2) - accel_measurement[3]]).T# 3x1
             
-        J = np.array([[-2*q_z, 2*q_w, -2*q_x, 2*q_y],
-                        [2*q_y, 2*q_x, 2*q_w, 2*q_z],
-                        [0, -4*q_y, -4*q_z, 0]]) # 3x4
+        J = np.array([[-2*q_y, 2*q_z, -2*q_w, 2*q_x],
+                        [ 2*q_x, 2*q_w, 2*q_z, 2*q_y],
+                        [ 0, -4*q_x, -4*q_y, 0]]) # 3x4
         
         delta_f = np.dot(J.T, f) # 4x1
 
         delta_q_accel = - beta * (delta_f/np.linalg.norm(f)) # 4x1
 
-        delta_q_gyro = 0.5 * quat_product(q_xyzw,gyro_measurement.T)
+        q_wxyz_norm = q_wxyz / np.linalg.norm(q_wxyz)
+        delta_q_gyro = 0.5 * quat_product(q_wxyz_norm,gyro_measurement.T)
 
         q_dot = delta_q_gyro + delta_q_accel
 
-        self.current_state["q_xyzw"] = q_xyzw + q_dot*self.imu_measurement["dt"]
+        self.current_state["q_wxyz"] = q_wxyz_norm + q_dot*self.imu_measurement["dt"]
 
         return
